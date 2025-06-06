@@ -9,6 +9,11 @@ from .propositional_logic import PropositionalLogicConfig, PropositionalLogicCur
 from .self_reference import SelfReferenceConfig, SelfReferenceCurriculum, SelfReferenceDataset
 from .syllogisms import SyllogismConfig, SyllogismCurriculum, SyllogismDataset
 from .zebra_puzzles import ZebraConfig, ZebraCurriculum, ZebraDataset
+from .multi_step_reasoning import (
+    MultiStepReasoningConfig,
+    MultiStepReasoningCurriculum,
+    MultiStepReasoningDataset,
+)
 
 __all__ = [
     "AliceInWonderlandConfig",
@@ -33,4 +38,7 @@ __all__ = [
     "KnightsKnavesConfig",
     "KnightsKnavesDataset",
     "KnightsKnavesCurriculum",
+    "MultiStepReasoningConfig",
+    "MultiStepReasoningDataset",
+    "MultiStepReasoningCurriculum",
 ]
