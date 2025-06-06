@@ -63,31 +63,38 @@ class MultiStepReasoningDataset(ProceduralDataset):
         """Make a deterministic reasoning step that requires deduction."""
         choice = rng.random()
         if choice < 0.33 or state.get("word") is None:
-            # make the arithmetic harder with larger numbers and subtraction
-            mult = rng.randint(10, 20)
-            sub = rng.randint(5, 15)
-            res = state["num"] * mult - sub
-            line = f"Step {step_no}: Multiply {state['num']} by {mult} and then subtract {sub}. " "What do you get?"
+            mult1 = rng.randint(10, 20)
+            add = rng.randint(5, 15)
+            mult2 = rng.randint(2, 5)
+            sub = rng.randint(2, 10)
+            res = (state["num"] * mult1 + add - sub) * mult2
+            line = (
+                f"Step {step_no}: Multiply {state['num']} by {mult1}, add {add}, subtract {sub}, "
+                f"then multiply the result by {mult2}. What number results?"
+            )
             state["num"] = res
         elif choice < 0.66:
             short_thres = rng.randint(3, 4)
             long_thres = rng.randint(7, 9)
-            if len(state["word"]) < short_thres:
-                classification = "short"
-            elif len(state["word"]) > long_thres:
-                classification = "long"
+            vowel_count = sum(1 for c in state["word"] if c in "aeiou")
+            if len(state["word"]) <= short_thres or vowel_count < 2:
+                classification = "small"
+            elif len(state["word"]) >= long_thres and vowel_count >= 3:
+                classification = "large"
             else:
                 classification = "medium"
             line = (
-                f"Step {step_no}: Words shorter than {short_thres} letters are 'short', "
-                f"between {short_thres} and {long_thres} letters are 'medium', otherwise 'long'. "
-                f"Is '{state['word']}' short, medium, or long?"
+                f"Step {step_no}: Words with \u2264{short_thres} letters or fewer than 2 vowels are 'small'; "
+                f"those with \u2265{long_thres} letters and at least 3 vowels are 'large'; otherwise 'medium'. "
+                f"Is '{state['word']}' small, medium, or large?"
             )
             state["word"] = classification
         else:
-            # introduce a simple family relationship puzzle
-            a, b, c = rng.sample(self.NAME_BANK, 3)
-            line = f"Step {step_no}: {a} is {b}'s parent and {b} is {c}'s parent. " f"Who is {c}'s grandparent?"
+            a, b, c, d = rng.sample(self.NAME_BANK, 4)
+            line = (
+                f"Step {step_no}: {a} and {b} are siblings. {b} is {c}'s parent and {c} and {d} are siblings. "
+                f"Who is {d}'s aunt or uncle?"
+            )
             state["person"] = a
         return line
 
@@ -95,36 +102,37 @@ class MultiStepReasoningDataset(ProceduralDataset):
         """Make an inductive reasoning step with slightly harder patterns."""
         choice = rng.random()
         if choice < 0.33:
-            inc1 = rng.randint(2, 5)
-            inc2 = rng.randint(1, inc1)
-            n = rng.randint(3, 6)
+            mult = rng.randint(2, 4)
+            add = rng.randint(3, 7)
+            n = rng.randint(3, 5)
             value = state["num"]
-            for i in range(n):
-                if i % 2 == 0:
-                    value += inc1
-                else:
-                    value -= inc2
+            for _ in range(n):
+                value = value * mult + add
             line = (
-                f"Step {step_no}: Starting at {state['num']}, alternate adding {inc1} and subtracting {inc2} "
-                f"for {n} steps. What number results?"
+                f"Step {step_no}: Starting at {state['num']}, repeatedly multiply by {mult} and add {add} "
+                f"for {n} iterations. What number results?"
             )
             state["num"] = value
         elif choice < 0.66:
-            reversed_word = state["word"][::-1] + state["word"][0]
+            new_word = state["word"][::2][::-1] + state["word"][-1]
             line = (
-                f"Step {step_no}: Reverse '{state['word']}' and append its first letter at the end. "
-                "What word results?"
+                f"Step {step_no}: Take every second letter of '{state['word']}', reverse those letters, "
+                f"and append the last letter of the original word. What word results?"
             )
-            state["word"] = reversed_word
+            state["word"] = new_word
         else:
             start = state.get("person", rng.choice(self.NAME_BANK))
-            step = rng.randint(1, 3)
+            forward = rng.randint(1, 3)
+            backward = rng.randint(1, 3)
             n = rng.randint(2, 4)
             idx = self.NAME_BANK.index(start)
-            target = self.NAME_BANK[(idx + step * n) % len(self.NAME_BANK)]
+            for _ in range(n):
+                idx = (idx + forward) % len(self.NAME_BANK)
+                idx = (idx - backward) % len(self.NAME_BANK)
+            target = self.NAME_BANK[idx]
             line = (
-                f"Step {step_no}: Starting from {start}, move forward {step} names {n} times in {self.NAME_BANK}. "
-                f"Which name do you reach?"
+                f"Step {step_no}: Starting from {start}, move forward {forward} names then backward {backward} names, "
+                f"repeating this {n} times in {self.NAME_BANK}. Which name do you reach?"
             )
             state["person"] = target
         return line
@@ -133,32 +141,36 @@ class MultiStepReasoningDataset(ProceduralDataset):
         """Generate an abductive reasoning step with trickier inference."""
         choice = rng.random()
         if choice < 0.33:
-            # harder numeric abduction using a square
-            secret = rng.randint(2, 9)
-            add = state["num"] - secret**2
+            secret = rng.randint(2, 5)
+            mult = rng.randint(2, 4)
+            add = state["num"] - secret**3 * mult
             wrong = max(2, secret + rng.randint(1, 3))
             options = [secret, wrong]
             rng.shuffle(options)
             line = (
-                f"Step {step_no}: The number {state['num']} was made by squaring a secret number "
+                f"Step {step_no}: The number {state['num']} was made by cubing a secret number, multiplying by {mult}, "
                 f"and adding {add}. Was that number {options[0]} or {options[1]}?"
             )
             state["num"] = secret
         elif choice < 0.66:
-            shift = rng.choice([1, 2])
+            shift = rng.randint(1, 3)
             orig = rng.choice(self.WORD_BANK)
-            encoded = "".join(chr(((ord(c) - 97 + shift) % 26) + 97) for c in orig[::-1])
+            encoded = "".join(chr(((ord(c) - 97 + shift) % 26) + 97) for c in orig)
+            encoded = encoded[::-1]
             wrong = rng.choice([w for w in self.WORD_BANK if w != orig])
             options = [orig, wrong]
             rng.shuffle(options)
             line = (
-                f"Step {step_no}: A secret word was reversed and each letter shifted forward by {shift} to become '{encoded}'. "
+                f"Step {step_no}: Each letter of a secret word was shifted forward by {shift} and then the result was reversed to get '{encoded}'. "
                 f"Was the original word '{options[0]}' or '{options[1]}'?"
             )
             state["word"] = orig
         else:
-            a, b, c = rng.sample(self.NAME_BANK, 3)
-            line = f"Step {step_no}: {a} and {b} are siblings. {b} is {c}'s parent. " f"Who is {a} to {c}?"
+            a, b, c, d = rng.sample(self.NAME_BANK, 4)
+            line = (
+                f"Step {step_no}: {a} is {b}'s parent. {b} and {c} are siblings. {c} is {d}'s parent. "
+                f"Who is {a} to {d}?"
+            )
             state["person"] = a
         return line
 
@@ -167,35 +179,43 @@ class MultiStepReasoningDataset(ProceduralDataset):
         choice = rng.random()
         if choice < 0.33:
             if rng.random() < 0.5:
-                base3 = np.base_repr(state["num"], base=3)
-                res = base3.count("2")
-                line = f"Step {step_no}: Write {state['num']} in base 3. How many digits '2' appear?"
+                base = 4
+                base_repr = np.base_repr(state["num"], base=base)
+                res = base_repr.count("3")
+                line = f"Step {step_no}: Write {state['num']} in base {base}. How many digits '3' appear?"
             else:
                 bin_str = bin(state["num"])[2:]
-                rotated = bin_str[1:] + bin_str[:1]
-                res = int(rotated, 2)
+                res = int(bin_str[::-1], 2)
                 line = (
-                    f"Step {step_no}: Write {state['num']} in binary and rotate the digits left by one. "
+                    f"Step {step_no}: Write {state['num']} in binary and reverse the digits. "
                     "What is the decimal value of the result?"
                 )
             state["num"] = res
         elif choice < 0.66:
-            index = (state["num"] ** 2) % len(self.WORD_BANK)
+            index = (state["num"] ** 3 + state["num"]) % len(self.WORD_BANK)
             res_word = self.WORD_BANK[index]
             line = (
-                f"Step {step_no}: Square {state['num']} and use it as an index into {self.WORD_BANK}. "
+                f"Step {step_no}: Cube {state['num']} and add it to itself, then use this as an index into {self.WORD_BANK}. "
                 f"Which word do you get?"
             )
             state["word"] = res_word
         else:
             person = state.get("person", rng.choice(self.NAME_BANK))
             idx = self.NAME_BANK.index(person)
-            new_name = self.NAME_BANK[(idx - 2 * state["num"]) % len(self.NAME_BANK)]
-            line = (
-                f"Step {step_no}: Starting from {person}, move backward {2 * state['num']} places in {self.NAME_BANK}. "
-                f"Which name do you land on?"
-            )
-            state["person"] = new_name
+            offset = state["num"] ** 2
+            if rng.random() < 0.5:
+                new_idx = (idx + offset) % len(self.NAME_BANK)
+                line = (
+                    f"Step {step_no}: Starting from {person}, move forward {offset} places in {self.NAME_BANK}. "
+                    f"Which name do you land on?"
+                )
+            else:
+                new_idx = (idx - offset) % len(self.NAME_BANK)
+                line = (
+                    f"Step {step_no}: Starting from {person}, move backward {offset} places in {self.NAME_BANK}. "
+                    f"Which name do you land on?"
+                )
+            state["person"] = self.NAME_BANK[new_idx]
         return line
 
     def _generate_item(self, rng: Random, idx: int) -> dict[str, Any]:
@@ -228,10 +248,12 @@ class MultiStepReasoningDataset(ProceduralDataset):
             question_lines.append(line)
 
         vowels = sum(1 for c in state["word"] if c in "aeiou")
+        name_len = len(state["person"])
         question_lines.append(
-            f"Step {steps}: Multiply {state['num']} by the number of vowels in '{state['word']}'. What is the result?"
+            f"Step {steps}: Multiply {state['num']} by the number of vowels in '{state['word']}' "
+            f"and then by the number of letters in '{state['person']}'. What is the result?"
         )
-        final_answer = state["num"] * vowels
+        final_answer = state["num"] * vowels * name_len
 
         question_text = "\n".join(question_lines)
 
